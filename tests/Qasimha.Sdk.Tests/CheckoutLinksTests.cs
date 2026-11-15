@@ -206,4 +206,109 @@ public class CheckoutLinksTests
         Assert.Equal("9a2e6c4b-1111-4c2d-8a1f-000000000001", link.Id);
         Assert.Equal("https://localhost/checkout/abc", link.Url);
     }
+
+    [Fact]
+    public async Task A_link_with_items_needs_no_amount()
+    {
+        using var harness = new Harness();
+        harness.Handler.Enqueue(201, Created);
+
+        await harness.Client.CheckoutLinks.CreateAsync(new CreateCheckoutLinkRequest
+        {
+            Phone = "+966512349999",
+            Items = new[] { new CheckoutLinkItem { Name = "Headphones", Quantity = 2, UnitPrice = 125.00m } },
+        });
+
+        Assert.Equal(
+            "{\"channel\":\"Link\",\"phone\":\"+966512349999\",\"items\":[{\"name\":\"Headphones\",\"quantity\":2,\"unitPrice\":125.00}]}",
+            harness.LastRequest.Body);
+    }
+
+    [Fact]
+    public async Task A_link_without_items_needs_an_amount()
+    {
+        using var harness = new Harness();
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.CheckoutLinks.CreateAsync(new CreateCheckoutLinkRequest
+        {
+            Phone = "+966512349999",
+            Items = Array.Empty<CheckoutLinkItem>(),
+        }));
+
+        var error = Assert.Single(ex.Errors);
+        Assert.Equal("Amount", error.Field);
+        Assert.Equal("is required when there are no items", error.Message);
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task Still_checks_an_amount_given_with_items()
+    {
+        using var harness = new Harness();
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.CheckoutLinks.CreateAsync(new CreateCheckoutLinkRequest
+        {
+            Amount = 10.005m,
+            Phone = "+966512349999",
+            Items = new[] { new CheckoutLinkItem { Name = "Headphones", UnitPrice = 10.00m } },
+        }));
+
+        var error = Assert.Single(ex.Errors);
+        Assert.Equal("Amount", error.Field);
+    }
+
+    [Fact]
+    public async Task A_null_channel_is_the_link_channel()
+    {
+        using var harness = new Harness();
+        harness.Handler.Enqueue(201, Created);
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.CheckoutLinks.CreateAsync(new CreateCheckoutLinkRequest { Amount = 10m, Channel = null }));
+        Assert.Equal("Phone", Assert.Single(ex.Errors).Field);
+
+        await harness.Client.CheckoutLinks.CreateAsync(new CreateCheckoutLinkRequest { Amount = 10m, Channel = null, Phone = "+966512349999" });
+
+        Assert.Equal("{\"amount\":10,\"phone\":\"+966512349999\"}", harness.LastRequest.Body);
+    }
+
+    [Fact]
+    public async Task Refuses_an_ejar_contract_number_over_50_characters()
+    {
+        using var harness = new Harness();
+        harness.Handler.Enqueue(201, Created);
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.CheckoutLinks.CreateAsync(new CreateCheckoutLinkRequest
+        {
+            Amount = 18000m,
+            Phone = "+966512349999",
+            EjarContractNumber = new string('1', 51),
+        }));
+
+        var error = Assert.Single(ex.Errors);
+        Assert.Equal("EjarContractNumber", error.Field);
+        Assert.Equal("must be at most 50 characters", error.Message);
+        Assert.Empty(harness.Handler.Requests);
+
+        await harness.Client.CheckoutLinks.CreateAsync(new CreateCheckoutLinkRequest
+        {
+            Amount = 18000m,
+            Phone = "+966512349999",
+            EjarContractNumber = new string('1', 50),
+        });
+
+        Assert.Single(harness.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task Refuses_an_unknown_link_language()
+    {
+        using var harness = new Harness();
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.CheckoutLinks.CreateAsync(new CreateCheckoutLinkRequest { Amount = 10m, Phone = "+966512349999", Language = "fr" }));
+
+        var error = Assert.Single(ex.Errors);
+        Assert.Equal("Language", error.Field);
+        Assert.Equal("must be ar or en", error.Message);
+        Assert.Empty(harness.Handler.Requests);
+    }
 }

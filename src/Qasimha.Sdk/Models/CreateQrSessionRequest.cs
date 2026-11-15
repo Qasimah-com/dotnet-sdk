@@ -17,4 +17,7 @@ public sealed class CreateQrSessionRequest
 
     /// <summary>The basket lines; at least one.</summary>
     public required IReadOnlyList<CheckoutItem> Items { get; set; }
+
+    /// <summary><c>"ar"</c> or <c>"en"</c>: the language of the hosted checkout for this order. When omitted the API uses the <c>Accept-Language</c> header.</summary>
+    public string? Language { get; set; }
 }

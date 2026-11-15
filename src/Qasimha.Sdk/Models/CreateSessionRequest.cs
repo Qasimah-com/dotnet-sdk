@@ -32,8 +32,9 @@ public sealed class CreateSessionRequest
     /// <summary>Free text shown on the order.</summary>
     public string? Description { get; set; }
 
-    /// <summary>One of the <see cref="CheckoutPaymentType"/> values. Default <see cref="CheckoutPaymentType.PayByInstalments"/>.</summary>
-    public string PaymentType { get; set; } = CheckoutPaymentType.PayByInstalments;
+    /// <summary>One of the <see cref="CheckoutPaymentType"/> values. The API ignores it; it is sent only when set.</summary>
+    [Obsolete("The API ignores PaymentType. Leave it unset.")]
+    public string? PaymentType { get; set; }
 
     /// <summary>Requested number of instalments. Default 4.</summary>
     public int Instalments { get; set; } = 4;
@@ -55,4 +56,7 @@ public sealed class CreateSessionRequest
 
     /// <summary>Where the shopper is sent after the hosted checkout. Honoured since the API release of 2026-09-25.</summary>
     public MerchantUrl? MerchantUrl { get; set; }
+
+    /// <summary><c>"ar"</c> or <c>"en"</c>: the language of the hosted checkout for this order. When omitted the API uses the <c>Accept-Language</c> header.</summary>
+    public string? Language { get; set; }
 }

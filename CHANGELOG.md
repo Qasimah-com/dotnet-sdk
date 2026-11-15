@@ -26,10 +26,34 @@ Keep a Changelog, and the package follows Semantic Versioning.
   `https://` and the event names must be known before a request is sent; the secret is never
   logged and is not part of `ToString()`.
 
+- `CreateSessionRequest.Language` and `CreateQrSessionRequest.Language` (`"ar"` or `"en"`): the
+  language of the hosted checkout for one order, sent in the body only when set. Any other value is
+  a `ValidationException` before a request is sent. The client-level `Language` is unchanged.
+
 ### Changed
 
+- `CreateCheckoutLinkRequest.Amount` is optional (`decimal?`) and no longer a `required` member.
+  With `Items` and no amount it is left out of the body and the API uses the sum of the lines; with
+  neither, a `ValidationException` on `Amount` is raised before a request is sent.
+- `CreateCheckoutLinkRequest.Channel` is nullable; `null` is the `Link` channel and is left out of
+  the body. The default is still `Link`.
+- `CreateCheckoutLinkRequest.Language` must be `"ar"` or `"en"` and `EjarContractNumber` at most
+  50 characters; both are checked before a request is sent.
+- `CheckoutItem.Type` is optional (`string?`) and no longer a `required` member. It is free text of
+  at most 50 characters, left out of the body when not set; an empty value is a `ValidationException`.
+- `MerchantUrl.Cancel` is optional (`string?`) and no longer a `required` member; it is left out of
+  the body when not set and the API then uses `Failure`. `Success` and `Failure` must both be
+  non-blank whenever a `MerchantUrl` is given.
+- `CreateSessionRequest.PaymentType` no longer defaults to `pay_by_instalments` and is sent only
+  when set. It is still validated when set.
 - `Order.Raw` follows the typed order responses of the API: enum names instead of integers, and
   internal fields that are not part of the contract are no longer included.
+
+### Deprecated
+
+- `CreateSessionRequest.PaymentType` is `[Obsolete]`: the API ignores it.
+- `MerchantUrl.Notification` is `[Obsolete]`: the field is reserved. It is never sent, and a
+  non-blank value is a `ValidationException` on `MerchantUrl.Notification` before a request is sent.
 
 ## [0.1.0] - 2026-09-25
 

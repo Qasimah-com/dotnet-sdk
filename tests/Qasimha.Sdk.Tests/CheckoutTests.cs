@@ -38,7 +38,8 @@ public class CheckoutTests
         Assert.Contains("\"taxAmount\":173.10", body, StringComparison.Ordinal);
         Assert.Contains("\"unitPrice\":45.00", body, StringComparison.Ordinal);
         Assert.Contains("\"quantity\":3", body, StringComparison.Ordinal);
-        Assert.Contains("\"paymentType\":\"pay_by_instalments\"", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("paymentType", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("language", body, StringComparison.Ordinal);
         Assert.Contains("\"instalments\":4", body, StringComparison.Ordinal);
         Assert.Contains("\"currencyCode\":\"SAR\"", body, StringComparison.Ordinal);
         Assert.Contains("\"countryCode\":\"SA\"", body, StringComparison.Ordinal);
@@ -57,6 +58,7 @@ public class CheckoutTests
         Assert.Equal("digital", root.GetProperty("items")[2].GetProperty("type").GetString());
         Assert.Equal("https://localhost/ok", root.GetProperty("merchantUrl").GetProperty("success").GetString());
         Assert.Equal("King Fahd Rd", root.GetProperty("shippingAddress").GetProperty("line1").GetString());
+        Assert.Equal("https://localhost/cancel", root.GetProperty("merchantUrl").GetProperty("cancel").GetString());
         Assert.False(root.GetProperty("merchantUrl").TryGetProperty("notification", out _));
     }
 
@@ -195,5 +197,81 @@ public class CheckoutTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => harness.Client.Checkout.CreateSessionAsync(null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => harness.Client.Checkout.CreatePosSessionAsync(null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => harness.Client.Checkout.CreateQrSessionAsync(null!));
+    }
+
+    [Fact]
+    public async Task A_merchant_url_without_cancel_leaves_it_out()
+    {
+        using var harness = new Harness();
+        harness.Handler.Enqueue(201, Fixtures.SessionCreated);
+        var request = Baskets.ThreeLine();
+        request.MerchantUrl = new MerchantUrl { Success = "https://localhost/ok", Failure = "https://localhost/ko" };
+
+        await harness.Client.Checkout.CreateSessionAsync(request);
+
+        using var document = JsonDocument.Parse(harness.LastRequest.Body!);
+        var merchantUrl = document.RootElement.GetProperty("merchantUrl");
+        Assert.Equal("https://localhost/ko", merchantUrl.GetProperty("failure").GetString());
+        Assert.False(merchantUrl.TryGetProperty("cancel", out _));
+    }
+
+    [Fact]
+    public async Task A_line_without_a_type_leaves_it_out()
+    {
+        using var harness = new Harness();
+        harness.Handler.Enqueue(201, Fixtures.SessionCreated);
+        var item = new CheckoutItem { ReferenceId = "SKU-T", Name = "Untyped", Quantity = 1, UnitPrice = 250.00m, TotalAmount = 250.00m };
+
+        await harness.Client.Checkout.CreateSessionAsync(Baskets.Single("CART-T", 250.00m, item));
+
+        using var document = JsonDocument.Parse(harness.LastRequest.Body!);
+        var line = document.RootElement.GetProperty("items")[0];
+        Assert.False(line.TryGetProperty("type", out _));
+        Assert.False(line.TryGetProperty("sku", out _));
+    }
+
+    [Fact]
+    public async Task A_line_type_is_free_text()
+    {
+        using var harness = new Harness();
+        harness.Handler.Enqueue(201, Fixtures.SessionCreated);
+        var item = Baskets.Item("SKU-S", "Installation", "service", 1, 250.00m);
+
+        await harness.Client.Checkout.CreateSessionAsync(Baskets.Single("CART-S", 250.00m, item));
+
+        using var document = JsonDocument.Parse(harness.LastRequest.Body!);
+        Assert.Equal("service", document.RootElement.GetProperty("items")[0].GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task A_session_language_goes_in_the_body()
+    {
+        using var harness = new Harness();
+        harness.Handler.Enqueue(201, Fixtures.SessionCreated);
+        var request = Baskets.ThreeLine();
+        request.Language = "ar";
+
+        await harness.Client.Checkout.CreateSessionAsync(request);
+
+        using var document = JsonDocument.Parse(harness.LastRequest.Body!);
+        Assert.Equal("ar", document.RootElement.GetProperty("language").GetString());
+    }
+
+    [Fact]
+    public async Task A_qr_session_language_goes_in_the_body_only_when_set()
+    {
+        using var harness = new Harness();
+        harness.Handler.Enqueue(201, Fixtures.Envelope("SESSION_CREATED", new { installmentId = "qr-1", qrCodeUrl = "https://localhost/pay/qr-1", status = "New" }));
+        harness.Handler.Enqueue(201, Fixtures.Envelope("SESSION_CREATED", new { installmentId = "qr-1", qrCodeUrl = "https://localhost/pay/qr-1", status = "New" }));
+
+        await harness.Client.Checkout.CreateQrSessionAsync(Baskets.Qr());
+        Assert.DoesNotContain("language", harness.LastRequest.Body, StringComparison.Ordinal);
+
+        var request = Baskets.Qr("QR-000000-B");
+        request.Language = "en";
+        await harness.Client.Checkout.CreateQrSessionAsync(request);
+
+        using var document = JsonDocument.Parse(harness.LastRequest.Body!);
+        Assert.Equal("en", document.RootElement.GetProperty("language").GetString());
     }
 }

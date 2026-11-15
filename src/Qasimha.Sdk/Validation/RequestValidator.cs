@@ -11,7 +11,10 @@ internal static class RequestValidator
         amountsValid &= Amount(errors, "ShippingAmount", request.ShippingAmount);
         amountsValid &= Amount(errors, "DiscountAmount", request.DiscountAmount);
 
-        if (!CheckoutPaymentType.IsKnown(request.PaymentType))
+#pragma warning disable CS0618
+        var paymentType = request.PaymentType;
+#pragma warning restore CS0618
+        if (paymentType is not null && !CheckoutPaymentType.IsKnown(paymentType))
         {
             errors.Add(new ApiFieldError("PaymentType", "must be one of " + string.Join(", ", CheckoutPaymentType.Known)));
         }
@@ -32,6 +35,13 @@ internal static class RequestValidator
         {
             Address(errors, "BillingAddress", request.BillingAddress);
         }
+
+        if (request.MerchantUrl is not null)
+        {
+            MerchantUrl(errors, request.MerchantUrl);
+        }
+
+        Language(errors, request.Language);
 
         if (amountsValid && itemsValid)
         {
@@ -63,6 +73,7 @@ internal static class RequestValidator
         RequireText(errors, "OrderReferenceId", request.OrderReferenceId, 255);
         var amountsValid = Amount(errors, "TotalAmount", request.TotalAmount);
         var itemsValid = Items(errors, request.Items);
+        Language(errors, request.Language);
 
         if (amountsValid && itemsValid)
         {
@@ -75,16 +86,27 @@ internal static class RequestValidator
     public static void Validate(CreateCheckoutLinkRequest request)
     {
         var errors = new List<ApiFieldError>();
-        Amount(errors, "Amount", request.Amount);
+        if (request.Amount is { } amount)
+        {
+            Amount(errors, "Amount", amount);
+        }
+        else if (request.Items is null || request.Items.Count == 0)
+        {
+            errors.Add(new ApiFieldError("Amount", "is required when there are no items"));
+        }
 
-        if (!CheckoutLinkChannel.IsKnown(request.Channel))
+        var channel = request.Channel ?? CheckoutLinkChannel.Link;
+        if (!CheckoutLinkChannel.IsKnown(channel))
         {
             errors.Add(new ApiFieldError("Channel", "must be Link or Qr"));
         }
-        else if (CheckoutLinkChannel.IsLink(request.Channel) && string.IsNullOrWhiteSpace(request.Phone))
+        else if (CheckoutLinkChannel.IsLink(channel) && string.IsNullOrWhiteSpace(request.Phone))
         {
             errors.Add(new ApiFieldError("Phone", "is required for the Link channel"));
         }
+
+        Language(errors, request.Language);
+        MaxLength(errors, "EjarContractNumber", request.EjarContractNumber, 50);
 
         if (request.OrderReferenceId is not null)
         {
@@ -214,7 +236,17 @@ internal static class RequestValidator
 
             RequireText(errors, prefix + "ReferenceId", item.ReferenceId, null);
             RequireText(errors, prefix + "Name", item.Name, null);
-            RequireText(errors, prefix + "Type", item.Type, null);
+            if (item.Type is not null)
+            {
+                if (string.IsNullOrWhiteSpace(item.Type))
+                {
+                    errors.Add(new ApiFieldError(prefix + "Type", "must not be empty"));
+                }
+                else
+                {
+                    MaxLength(errors, prefix + "Type", item.Type, 50);
+                }
+            }
 
             var quantityValid = item.Quantity >= 1;
             if (!quantityValid)
@@ -301,6 +333,38 @@ internal static class RequestValidator
         if (!string.IsNullOrEmpty(consumer.NationalId) && !IsNationalId(consumer.NationalId))
         {
             errors.Add(new ApiFieldError("Consumer.NationalId", "must be 10 digits starting with 1 or 2"));
+        }
+    }
+
+    private static void MerchantUrl(List<ApiFieldError> errors, MerchantUrl merchantUrl)
+    {
+        RequireText(errors, "MerchantUrl.Success", merchantUrl.Success, null);
+        RequireText(errors, "MerchantUrl.Failure", merchantUrl.Failure, null);
+
+#pragma warning disable CS0618
+        var notification = merchantUrl.Notification;
+#pragma warning restore CS0618
+        if (!string.IsNullOrWhiteSpace(notification))
+        {
+            errors.Add(new ApiFieldError("MerchantUrl.Notification", "is reserved and must not be set"));
+        }
+    }
+
+    private static void Language(List<ApiFieldError> errors, string? value)
+    {
+        if (value is not null
+            && !string.Equals(value, "ar", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(value, "en", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add(new ApiFieldError("Language", "must be ar or en"));
+        }
+    }
+
+    private static void MaxLength(List<ApiFieldError> errors, string field, string? value, int max)
+    {
+        if (value is not null && value.Length > max)
+        {
+            errors.Add(new ApiFieldError(field, "must be at most " + max.ToString(System.Globalization.CultureInfo.InvariantCulture) + " characters"));
         }
     }
 

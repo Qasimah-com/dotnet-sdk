@@ -1,6 +1,6 @@
 namespace Qasimha.Sdk;
 
-/// <summary>The <c>type</c> of a basket line.</summary>
+/// <summary>Common values for the optional <c>type</c> of a basket line, which is free text.</summary>
 public static class ItemType
 {
     /// <summary>Goods that are shipped.</summary>

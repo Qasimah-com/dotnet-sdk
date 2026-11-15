@@ -159,7 +159,9 @@ public class BasketValidationTests
     {
         using var harness = new Harness();
         var request = Baskets.ThreeLine();
+#pragma warning disable CS0618
         request.PaymentType = paymentType;
+#pragma warning restore CS0618
 
         var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.Checkout.CreateSessionAsync(request));
 
@@ -176,7 +178,9 @@ public class BasketValidationTests
         using var harness = new Harness();
         harness.Handler.Enqueue(201, Fixtures.SessionCreated);
         var request = Baskets.ThreeLine();
+#pragma warning disable CS0618
         request.PaymentType = paymentType;
+#pragma warning restore CS0618
 
         await harness.Client.Checkout.CreateSessionAsync(request);
 
@@ -286,6 +290,127 @@ public class BasketValidationTests
         var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.Checkout.CreateQrSessionAsync(request));
 
         Assert.Contains(ex.Errors, e => e.Field == "TotalAmount");
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Refuses_an_empty_line_type(string type)
+    {
+        using var harness = new Harness();
+        var request = Baskets.Single("CART-T", 250.00m, Baskets.Item("SKU-T", "Typed", type, 1, 250.00m));
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.Checkout.CreateSessionAsync(request));
+
+        var error = Assert.Single(ex.Errors);
+        Assert.Equal("Items[0].Type", error.Field);
+        Assert.Equal("must not be empty", error.Message);
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task Refuses_a_line_type_over_50_characters()
+    {
+        using var harness = new Harness();
+        var request = Baskets.Single("CART-T", 250.00m, Baskets.Item("SKU-T", "Typed", new string('a', 51), 1, 250.00m));
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.Checkout.CreateSessionAsync(request));
+
+        var error = Assert.Single(ex.Errors);
+        Assert.Equal("Items[0].Type", error.Field);
+        Assert.Equal("must be at most 50 characters", error.Message);
+    }
+
+    [Fact]
+    public async Task Accepts_a_line_type_of_50_characters()
+    {
+        using var harness = new Harness();
+        harness.Handler.Enqueue(201, Fixtures.SessionCreated);
+        var request = Baskets.Single("CART-T", 250.00m, Baskets.Item("SKU-T", "Typed", new string('a', 50), 1, 250.00m));
+
+        await harness.Client.Checkout.CreateSessionAsync(request);
+
+        Assert.Single(harness.Handler.Requests);
+    }
+
+    [Theory]
+    [InlineData("", "https://localhost/ko", "MerchantUrl.Success")]
+    [InlineData("https://localhost/ok", " ", "MerchantUrl.Failure")]
+    public async Task A_merchant_url_needs_success_and_failure(string success, string failure, string field)
+    {
+        using var harness = new Harness();
+        var request = Baskets.ThreeLine();
+        request.MerchantUrl = new MerchantUrl { Success = success, Failure = failure, Cancel = "https://localhost/cancel" };
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.Checkout.CreateSessionAsync(request));
+
+        var error = Assert.Single(ex.Errors);
+        Assert.Equal(field, error.Field);
+        Assert.Equal("is required", error.Message);
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task Refuses_a_merchant_url_notification()
+    {
+        using var harness = new Harness();
+        var request = Baskets.ThreeLine();
+#pragma warning disable CS0618
+        request.MerchantUrl = new MerchantUrl { Success = "https://localhost/ok", Failure = "https://localhost/ko", Notification = "https://localhost/hook" };
+#pragma warning restore CS0618
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.Checkout.CreateSessionAsync(request));
+
+        var error = Assert.Single(ex.Errors);
+        Assert.Equal("MerchantUrl.Notification", error.Field);
+        Assert.Equal("is reserved and must not be set", error.Message);
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task A_blank_merchant_url_notification_is_never_sent()
+    {
+        using var harness = new Harness();
+        harness.Handler.Enqueue(201, Fixtures.SessionCreated);
+        var request = Baskets.ThreeLine();
+#pragma warning disable CS0618
+        request.MerchantUrl = new MerchantUrl { Success = "https://localhost/ok", Failure = "https://localhost/ko", Notification = " " };
+#pragma warning restore CS0618
+
+        await harness.Client.Checkout.CreateSessionAsync(request);
+
+        Assert.DoesNotContain("notification", harness.LastRequest.Body, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("fr")]
+    [InlineData("")]
+    public async Task Refuses_an_unknown_session_language(string language)
+    {
+        using var harness = new Harness();
+        var request = Baskets.ThreeLine();
+        request.Language = language;
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.Checkout.CreateSessionAsync(request));
+
+        var error = Assert.Single(ex.Errors);
+        Assert.Equal("Language", error.Field);
+        Assert.Equal("must be ar or en", error.Message);
+        Assert.Empty(harness.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task Refuses_an_unknown_qr_session_language()
+    {
+        using var harness = new Harness();
+        var request = Baskets.Qr();
+        request.Language = "fr";
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => harness.Client.Checkout.CreateQrSessionAsync(request));
+
+        var error = Assert.Single(ex.Errors);
+        Assert.Equal("Language", error.Field);
         Assert.Empty(harness.Handler.Requests);
     }
 }

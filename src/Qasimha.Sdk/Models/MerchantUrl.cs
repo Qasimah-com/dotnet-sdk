@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Qasimha.Sdk;
 
 /// <summary>
@@ -11,9 +13,11 @@ public sealed class MerchantUrl
     /// <summary>Opened after a declined or failed checkout.</summary>
     public required string Failure { get; set; }
 
-    /// <summary>Opened when the shopper abandons the checkout.</summary>
-    public required string Cancel { get; set; }
+    /// <summary>Opened when the shopper abandons the checkout. The API uses <see cref="Failure"/> when omitted.</summary>
+    public string? Cancel { get; set; }
 
-    /// <summary>Server-to-server notification URL, when different from your configured webhook endpoint.</summary>
+    /// <summary>Reserved. The API refuses any value, so the SDK never sends it and refuses a request that sets it.</summary>
+    [Obsolete("MerchantUrl.Notification is reserved and must not be set. Register a webhook endpoint instead.")]
+    [JsonIgnore]
     public string? Notification { get; set; }
 }

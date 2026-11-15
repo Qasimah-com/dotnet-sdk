@@ -9,8 +9,8 @@ public sealed class CheckoutItem
     /// <summary>Product name, shown to the shopper.</summary>
     public required string Name { get; set; }
 
-    /// <summary><see cref="ItemType.Physical"/> or <see cref="ItemType.Digital"/>.</summary>
-    public required string Type { get; set; }
+    /// <summary>Optional free text of at most 50 characters, such as <see cref="ItemType.Physical"/> or <see cref="ItemType.Digital"/>.</summary>
+    public string? Type { get; set; }
 
     /// <summary>Stock-keeping unit.</summary>
     public string? Sku { get; set; }

@@ -20,7 +20,7 @@ public sealed class CheckoutLinksResource
     /// <param name="request">The link; validated before sending.</param>
     /// <param name="options">Per-call idempotency options.</param>
     /// <param name="cancellationToken">Cancels the call.</param>
-    /// <exception cref="ValidationException">A <c>Link</c> without a phone (nothing sent), or a 400 from the API.</exception>
+    /// <exception cref="ValidationException">A <c>Link</c> without a phone or no amount and no items (nothing sent), or a 400 from the API.</exception>
     /// <exception cref="DuplicateOrderReferenceException">The reference is already in use.</exception>
     /// <exception cref="ConflictException"><c>MERCHANT_SUSPENDED</c>.</exception>
     public async Task<CheckoutLink> CreateAsync(
